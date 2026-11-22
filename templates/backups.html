@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <h1>Backups</h1>
+  <button id="backup-all-btn" class="btn primary">Backup all devices now</button>
+</div>
+
+<table class="device-table">
+  <thead><tr><th>Device</th><th>Filename</th><th>Size</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+    {% for b in recent %}
+    <tr>
+      <td>#{{ b.device_id }}</td>
+      <td>{{ b.filename }}</td>
+      <td>{{ b.size }} bytes</td>
+      <td>{{ b.created_at }}</td>
+      <td><a class="btn small" href="/backups/download/{{ b.id }}">Download</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="empty">No backups yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

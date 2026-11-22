@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Topology</h1>
+    <div class="topo-meta">
+      {{ devices|length }} devices, {{ unmanaged|length }} unmanaged, {{ links|length }} links
+      {% if scanned_at %} · Scanned {{ scanned_at }}{% endif %}
+    </div>
+  </div>
+  <div class="topo-controls">
+    <form method="get" action="/topology">
+      <input type="hidden" name="unmanaged" value="{{ 1 if show_unmanaged else 0 }}">
+      <select name="site" onchange="this.form.submit()">
+        <option value="0">All sites</option>
+        {% for s in sites %}
+        <option value="{{ s.id }}" {{ 'selected' if site_filter == s.id else '' }}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <button id="scan-topo-btn" class="btn primary" type="button">Refresh scan</button>
+    <button id="topo-fit-btn" class="btn" type="button">Fit</button>
+    <button id="topo-reset-btn" class="btn" type="button">Reset</button>
+    <a class="btn" href="/topology?site={{ site_filter }}&unmanaged={{ 0 if show_unmanaged else 1 }}">
+      Unmanaged: {{ 'On' if show_unmanaged else 'Off' }}
+    </a>
+  </div>
+</div>
+
+<div class="topo-legend">
+  <span><span class="dot online"></span> Online</span>
+  <span><span class="dot offline"></span> Offline</span>
+  <span><span class="dot unmanaged"></span> Unmanaged</span>
+  <span class="muted">On line: port · speed</span>
+</div>
+
+<div class="topo-stage" id="topoStage">
+  <div class="topo-canvas" id="topoCanvas">
+    <svg class="topo-svg" id="topoSvg" width="1000" height="760">
+      {% for l in links %}
+        {% if l['from'] in positions and l['to'] in positions %}
+          {% set p1 = positions[l['from']] %}
+          {% set p2 = positions[l['to']] %}
+          {% set x1 = p1.x + 78 %}{% set y1 = p1.y + 42 %}
+          {% set x2 = p2.x + 78 %}{% set y2 = p2.y + 42 %}
+          <line x1="{{ x1 }}" y1="{{ y1 }}" x2="{{ x2 }}" y2="{{ y2 }}"></line>
+          {% if l.label and l.label != 'site' %}
+          <text x="{{ (x1 + x2) // 2 }}" y="{{ (y1 + y2) // 2 - 3 }}" text-anchor="middle">{{ l.label }}</text>
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+
+      {% for up in unmanaged_positions %}
+        {% if up.item.from_device in positions %}
+          {% set p1 = positions[up.item.from_device] %}
+          {% set x1 = p1.x + 78 %}{% set y1 = p1.y + 42 %}
+          {% set x2 = up.x + 55 %}{% set y2 = up.y + 18 %}
+          <line x1="{{ x1 }}" y1="{{ y1 }}" x2="{{ x2 }}" y2="{{ y2 }}" stroke-dasharray="4 3" opacity="0.45"></line>
+          {% set ulbl = ((up.item.via or '') ~ (' · ' ~ up.item.speed if up.item.speed else ''))|trim %}
+          {% if ulbl %}
+          <text x="{{ (x1 + x2) // 2 }}" y="{{ (y1 + y2) // 2 - 2 }}" text-anchor="middle" opacity="0.7">{{ ulbl }}</text>
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+    </svg>
+
+    <div class="topo-nodes">
+      {% for d in devices %}
+        {% set p = positions[d.id] %}
+        <div class="node-card {{ d.status }}" style="left:{{ p.x }}px; top:{{ p.y }}px;">
+          <div class="node-name">{{ d.display_name }}</div>
+          <div class="node-ip">{{ d.ip }}</div>
+          <div class="node-metrics">
+            {% if d.status != 'online' %}offline{% elif d.kind == 'generic' %}ping {{ d.latency_ms if d.latency_ms is not none else '?' }} ms{% else %}CPU {{ d.cpu_usage|round|int }}% · RAM {{ d.ram_usage|round|int }}%{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+
+      {% for up in unmanaged_positions %}
+        <div class="node-card unmanaged" style="left:{{ up.x }}px; top:{{ up.y }}px;">
+          <div class="node-name">{{ up.item.name or up.item.ip or 'Unknown' }}</div>
+          <div class="node-ip">{{ up.item.board or up.item.ip or '' }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

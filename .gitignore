@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# MikrApp runtime data: never commit these (they contain router passwords and your history)
+mikrapp.db
+mikrapp.db-*
+*.db
+*.db-wal
+*.db-shm
+logs/
+backups/*
+!backups/.gitkeep
+
+# Local settings / secrets
+.env
+*.env
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

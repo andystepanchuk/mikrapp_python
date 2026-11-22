@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="dash-meta" data-stamp="{{ stamp }}" data-interval="{{ interval }}" hidden></div>
+<div class="page-header">
+  <h1>Dashboard</h1>
+  <button id="check-all-btn" class="btn primary">Check all devices</button>
+</div>
+
+<div class="stat-cards">
+  <div class="stat-card"><span class="num">{{ stats.total }}</span><span class="label">Devices</span></div>
+  <div class="stat-card online"><span class="num">{{ stats.online }}</span><span class="label">Online</span></div>
+  <div class="stat-card offline"><span class="num">{{ stats.offline }}</span><span class="label">Offline</span></div>
+  <div class="stat-card"><span class="num">{{ stats.avg_cpu }}%</span><span class="label">Avg CPU</span></div>
+</div>
+
+<table class="device-table" id="device-table">
+  <thead>
+    <tr>
+      <th>Status</th><th>Identity</th><th>IP</th><th>Site</th><th>Via</th>
+      <th>CPU</th><th>RAM</th><th>Uptime</th><th>Version</th><th>Last check</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in devices %}
+    <tr data-device-id="{{ d.id }}">
+      <td><span class="pill {{ d.status }}" title="{{ d.last_error }}">{{ d.status }}</span></td>
+      <td><a href="/devices/{{ d.id }}">{{ d.display_name }}</a></td>
+      <td>{{ d.ip }}</td>
+      <td>{{ d.site_name }}</td>
+      <td>{{ d.agent_path or 'direct' }}</td>
+      {% if d.kind == 'generic' %}
+      <td>—</td><td>—</td>
+      <td>{% if d.latency_ms is not none and d.status == 'online' %}ping {{ d.latency_ms }} ms{% endif %}</td>
+      <td>ping only</td>
+      {% else %}
+      <td>{{ d.cpu_usage }}%</td>
+      <td>{{ d.ram_usage }}%</td>
+      <td>{{ d.uptime }}</td>
+      <td>{{ d.routeros_version }}</td>
+      {% endif %}
+      <td class="ts" data-ts="{{ d.last_check_at or '' }}">—</td>
+      <td><button class="btn small check-one" data-id="{{ d.id }}">Check</button></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="11" class="empty">No devices yet. Add some on the Devices page.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><h1>Devices</h1></div>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Add device</h2>
+    <form method="post" action="/devices/add">
+      <label>Site</label>
+      <select name="site_id">
+        {% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+      <label>IP address</label>
+      <input type="text" name="ip" placeholder="192.168.88.1" required>
+      <label>Name (optional, recommended for non-MikroTik)</label>
+      <input type="text" name="name" placeholder="Office printer">
+      <label>Type</label>
+      <select name="kind">
+        <option value="mikrotik">MikroTik (connect)</option>
+        <option value="generic">Other device (ping only, needs agent)</option>
+      </select>
+      <label>Via agent</label>
+      <select name="agent_id">
+        <option value="0">None - connect directly from the server</option>
+        {% for a in agents %}<option value="{{ a.id }}">{{ a.display_name }} ({{ a.ip }}){% if a.agent_path %} – via {{ a.agent_path }}{% endif %}</option>{% endfor %}
+      </select>
+      <label>Username (MikroTik only)</label>
+      <input type="text" name="username" value="admin">
+      <label>Password (MikroTik only)</label>
+      <input type="password" name="password">
+      <label>Protocol</label>
+      <select name="protocol">
+        <option value="auto">Auto (API then SSH)</option>
+        <option value="api">API only</option>
+        <option value="ssh">SSH only</option>
+      </select>
+      <label>SSH port</label>
+      <input type="number" name="port" value="22" min="1" max="65535">
+      <label>API port</label>
+      <input type="number" name="api_port" value="8728" min="1" max="65535">
+      <button type="submit" class="btn primary">Add device</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Mass add</h2>
+    <form method="post" action="/devices/mass-add">
+      <label>Site</label>
+      <select name="site_id">
+        {% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+      <label>One per line. MikroTik: <code>ip</code> or <code>ip,username,password</code>. Other device: <code>ip</code> or <code>ip,name</code></label>
+      <textarea name="lines" rows="6" placeholder="192.168.88.1&#10;192.168.88.2,admin,secret"></textarea>
+      <label>Type</label>
+      <select name="kind">
+        <option value="mikrotik">MikroTik (connect)</option>
+        <option value="generic">Other device (ping only, needs agent)</option>
+      </select>
+      <label>Via agent</label>
+      <select name="agent_id">
+        <option value="0">None - connect directly from the server</option>
+        {% for a in agents %}<option value="{{ a.id }}">{{ a.display_name }} ({{ a.ip }}){% if a.agent_path %} – via {{ a.agent_path }}{% endif %}</option>{% endfor %}
+      </select>
+      <label>Default username</label>
+      <input type="text" name="username" value="admin">
+      <label>Default password</label>
+      <input type="password" name="password">
+      <label>Default SSH port</label>
+      <input type="number" name="port" value="22" min="1" max="65535">
+      <label>Default API port</label>
+      <input type="number" name="api_port" value="8728" min="1" max="65535">
+      <button type="submit" class="btn primary">Add all</button>
+    </form>
+  </section>
+</div>
+
+<table class="device-table">
+  <thead>
+    <tr><th>Identity</th><th>IP</th><th>Site</th><th>Type</th><th>Via</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for d in devices %}
+    <tr>
+      <td><a href="/devices/{{ d.id }}">{{ d.display_name }}</a></td>
+      <td>{{ d.ip }}</td>
+      <td>{{ d.site_name }}</td>
+      <td>{{ 'ping only' if d.kind == 'generic' else d.protocol }}</td>
+      <td>{{ d.agent_path or 'direct' }}</td>
+      <td><span class="pill {{ d.status }}" title="{{ d.last_error }}">{{ d.status }}</span>
+          {% if d.latency_ms is not none and d.status == 'online' and d.agent_id %}<span class="muted">{{ d.latency_ms }} ms</span>{% endif %}</td>
+      <td>
+        <form method="post" action="/devices/{{ d.id }}/delete" onsubmit="return confirm('Delete this device?')">
+          <button type="submit" class="btn small danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="empty">No devices yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

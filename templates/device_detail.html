@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>
+      {{ device.display_name }}
+      <span class="pill {{ device.status }}">{{ device.status }}</span>
+    </h1>
+    <div class="topo-meta">
+      {{ device.ip }} · {{ device.site_name }}
+      {% if device.status == 'online' and device.uptime %} · Uptime {{ device.uptime }}{% endif %}
+      {% if device.status == 'offline' and offline_for %} · Offline for {{ offline_for }}{% endif %}
+    </div>
+  </div>
+  <div class="topo-controls">
+    <a class="btn" href="/devices">Back to devices</a>
+    <button id="check-device-btn" class="btn primary" data-id="{{ device.id }}">Check now</button>
+    <button id="backup-device-btn" class="btn" data-id="{{ device.id }}">Backup now</button>
+  </div>
+</div>
+
+{% if device.last_error %}
+<div class="card"><p class="error">Last check: {{ device.last_error }}</p></div>
+{% endif %}
+
+{% if detail.error %}
+<div class="card"><p class="error">Could not fetch live data: {{ detail.error }}</p></div>
+{% endif %}
+
+<div class="stat-cards">
+  <div class="stat-card"><span class="num">{{ device.cpu_usage }}%</span><span class="label">CPU</span></div>
+  <div class="stat-card"><span class="num">{{ device.ram_usage }}%</span><span class="label">RAM</span></div>
+  <div class="stat-card"><span class="num">{{ device.temperature if device.temperature is not none else '—' }}</span><span class="label">Temp °C</span></div>
+  <div class="stat-card"><span class="num">{{ device.voltage if device.voltage is not none else '—' }}</span><span class="label">Voltage</span></div>
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Device info</h2>
+    <table class="kv-table">
+      <tr><td>Type</td><td>{{ 'Other device (ping only)' if device.kind == 'generic' else 'MikroTik' }}</td></tr>
+      <tr><td>Reached via</td><td>{{ device.agent_path or 'direct from server' }}</td></tr>
+      {% if device.latency_ms is not none and device.agent_id %}<tr><td>Ping latency</td><td>{{ device.latency_ms }} ms</td></tr>{% endif %}
+      <tr><td>Board</td><td>{{ device.board or '—' }}</td></tr>
+      <tr><td>RouterOS</td><td>{{ device.routeros_version or '—' }}</td></tr>
+      <tr><td>Protocol</td><td>{{ device.protocol }}</td></tr>
+      <tr><td>API port</td><td>{{ device.api_port }}</td></tr>
+      <tr><td>SSH port</td><td>{{ device.port }}</td></tr>
+      <tr><td>Last seen</td><td>{{ device.last_seen or '—' }}</td></tr>
+      <tr><td>Last check</td><td class="ts" data-ts="{{ device.last_check_at or '' }}">—</td></tr>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>PoE</h2>
+    {% if device.poe_ok %}
+    <table class="kv-table">
+      <tr><td>Powered ports</td><td>{{ device.poe_count }} / {{ device.poe_ports }}</td></tr>
+      <tr><td>Total power</td><td>{{ device.poe_power }} W</td></tr>
+      <tr><td>Updated</td><td>{{ device.poe_updated or '—' }}</td></tr>
+    </table>
+    {% else %}
+    <p class="muted">No PoE output detected on this device.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Interfaces</h2>
+  <table class="device-table">
+    <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>MAC</th><th>Rate</th><th>Neighbor</th></tr></thead>
+    <tbody>
+      {% for i in detail.interfaces %}
+      {% set neighs = detail.neighbors_by_interface.get(i.name|lower, []) %}
+      <tr>
+        <td>{{ i.name }}</td>
+        <td>{{ i.kind }}</td>
+        <td><span class="pill {{ 'online' if i.status == 'up' else 'offline' }}">{{ i.status }}</span></td>
+        <td>{{ i.mac or '—' }}</td>
+        <td>{{ i.rate or '—' }}</td>
+        <td>
+          {% if neighs %}{{ neighs[0].label }}{% if neighs|length > 1 %} (+{{ neighs|length - 1 }}){% endif %}{% else %}—{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">No interface data{% if device.status != 'online' %} (device offline){% endif %}.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>IP addresses</h2>
+    <table class="device-table">
+      <thead><tr><th>Address</th><th>Interface</th><th>Network</th></tr></thead>
+      <tbody>
+        {% for ip in detail.ip_addresses %}
+        <tr><td>{{ ip.address }}</td><td>{{ ip.interface }}</td><td>{{ ip.network }}</td></tr>
+        {% else %}
+        <tr><td colspan="3" class="empty">No IP data.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>DHCP leases</h2>
+    <table class="device-table">
+      <thead><tr><th>Address</th><th>Hostname</th><th>MAC</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for l in detail.dhcp_leases %}
+        <tr><td>{{ l.address }}</td><td>{{ l.hostname or '—' }}</td><td>{{ l.mac }}</td><td>{{ l.status }}</td></tr>
+        {% else %}
+        <tr><td colspan="4" class="empty">No DHCP leases (not a DHCP server, or none active).</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Watchdog</h2>
+  {% if detail.watchdog and detail.watchdog.enabled %}
+  <table class="kv-table">
+    <tr><td>Watch address</td><td>{{ detail.watchdog.watch_address }}</td></tr>
+    <tr><td>Ping start after</td><td>{{ detail.watchdog.ping_start_after }}</td></tr>
+    <tr><td>Ping timeout</td><td>{{ detail.watchdog.ping_timeout }}</td></tr>
+  </table>
+  {% else %}
+  <p class="muted">Watchdog is not configured on this device.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Check history <span class="muted">(latest 50)</span></h2>
+  <table class="device-table">
+    <thead><tr><th>Time</th><th>Result</th><th>Route</th><th>Trigger</th><th>Duration</th><th>Latency</th><th>Details</th></tr></thead>
+    <tbody>
+      {% for h in history %}
+      <tr>
+        <td class="ts" data-ts="{{ h.checked_at }}">{{ h.checked_at[:19] }}</td>
+        <td><span class="pill {{ 'online' if h.status == 'online' else 'offline' }}">{{ h.status }}</span>{% if h.status_changed %} <span class="muted">changed from {{ h.previous_status }}</span>{% endif %}</td>
+        <td>{{ h.route }}</td>
+        <td>{{ h.trigger }}</td>
+        <td>{{ h.duration_ms }} ms</td>
+        <td>{{ (h.latency_ms ~ ' ms') if h.latency_ms is not none else '—' }}</td>
+        <td>{{ h.attempts_text }}{% if h.error %}<br><span class="error">{{ h.error }}</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="empty">No checks recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Backups</h2>
+  <table class="device-table">
+    <thead><tr><th>Filename</th><th>Size</th><th>Created</th><th></th></tr></thead>
+    <tbody>
+      {% for b in detail.backups %}
+      <tr>
+        <td>{{ b.filename }}</td><td>{{ b.size }} bytes</td><td>{{ b.created_at }}</td>
+        <td><a class="btn small" href="/backups/download/{{ b.id }}">Download</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">No backups yet for this device.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Connection settings</h2>
+  <form method="post" action="/devices/{{ device.id }}/edit">
+    <label>Display name</label>
+    <input type="text" name="custom_identity" value="{{ device.custom_identity }}" placeholder="{{ device.identity or device.ip }}">
+    <label>Type</label>
+    <select name="kind">
+      <option value="mikrotik" {{ 'selected' if device.kind != 'generic' else '' }}>MikroTik (connect)</option>
+      <option value="generic" {{ 'selected' if device.kind == 'generic' else '' }}>Other device (ping only, needs agent)</option>
+    </select>
+    <label>Via agent</label>
+    <select name="agent_id">
+      <option value="0">None - connect directly from the server</option>
+      {% for a in agents %}
+      <option value="{{ a.id }}" {{ 'selected' if device.agent_id == a.id else '' }}>{{ a.display_name }} ({{ a.ip }}){% if a.agent_path %} – via {{ a.agent_path }}{% endif %}</option>
+      {% endfor %}
+    </select>
+    <label>Site</label>
+    <select name="site_id">
+      {% for s in sites %}
+      <option value="{{ s.id }}" {{ 'selected' if s.id == device.site_id else '' }}>{{ s.name }}</option>
+      {% endfor %}
+    </select>
+    <label>IP address</label>
+    <input type="text" name="ip" value="{{ device.ip }}" required>
+    <label>Username (MikroTik only)</label>
+    <input type="text" name="username" value="{{ device.username }}">
+    <label>Password (leave blank to keep current)</label>
+    <input type="password" name="password" placeholder="••••••••">
+    <label>Protocol</label>
+    <select name="protocol">
+      <option value="auto" {{ 'selected' if device.protocol == 'auto' else '' }}>Auto (API then SSH)</option>
+      <option value="api" {{ 'selected' if device.protocol == 'api' else '' }}>API only</option>
+      <option value="ssh" {{ 'selected' if device.protocol == 'ssh' else '' }}>SSH only</option>
+    </select>
+    <label>SSH port</label>
+    <input type="number" name="port" value="{{ device.port }}" min="1" max="65535">
+    <label>API port</label>
+    <input type="number" name="api_port" value="{{ device.api_port }}" min="1" max="65535">
+    <button type="submit" class="btn primary">Save changes</button>
+  </form>
+</section>
+{% endblock %}

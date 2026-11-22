@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><h1>Commands</h1></div>
+
+<section class="card">
+  <h2>New template</h2>
+  <form method="post" action="/commands/add">
+    <label>Name</label>
+    <input type="text" name="name" required>
+    <label>Category</label>
+    <input type="text" name="category" value="Custom">
+    <label>Description</label>
+    <input type="text" name="description">
+    <label>Commands (one RouterOS command per line)</label>
+    <textarea name="commands" rows="4" placeholder="/system/resource/print" required></textarea>
+    <button type="submit" class="btn primary">Save template</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Run a template</h2>
+  <div class="run-form">
+    <select id="template-select">
+      {% for t in cmd_templates %}
+      <option value="{{ t.id }}">{{ t.category }} / {{ t.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="device-checklist">
+      {% for d in devices %}
+      <label><input type="checkbox" class="device-check" value="{{ d.id }}"> {{ d.display_name }} ({{ d.ip }})</label>
+      {% endfor %}
+    </div>
+    <button id="run-template-btn" class="btn primary">Run on selected devices</button>
+  </div>
+  <pre id="run-output" class="output-box"></pre>
+</section>
+
+<table class="device-table">
+  <thead><tr><th>Category</th><th>Name</th><th>Description</th><th></th></tr></thead>
+  <tbody>
+    {% for t in cmd_templates %}
+    <tr>
+      <td>{{ t.category }}</td>
+      <td>{{ t.name }}</td>
+      <td>{{ t.description }}</td>
+      <td>
+        <form method="post" action="/commands/{{ t.id }}/delete" onsubmit="return confirm('Delete this template?')">
+          <button type="submit" class="btn small danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
