@@ -157,6 +157,19 @@ your laptop.
     network-wide views are not built yet. To read the file on Windows:
     `Get-Content logs\checks-*.jsonl -Tail 20`.
 
+- **Device logs by syslog (CR-011):** routers send their log to MikrApp, which
+  stores it (table `logs`) and shows it on the **Logs** page (filters: device,
+  severity, topic, text, time; newest first, "older messages" paging) and in
+  the latest-50 card on each device page. The time stored is the time MikrApp
+  received the message. Settings: `MIKRAPP_SYSLOG` (`off` disables),
+  `MIKRAPP_SYSLOG_HOST` (0.0.0.0), `MIKRAPP_SYSLOG_PORT` (5514),
+  `MIKRAPP_SYSLOG_DAYS` (90, 0 keeps forever). Old messages are deleted at
+  start and every hour by the scheduler. Messages from addresses that are not
+  a device in MikrApp are dropped and counted; the Logs page lists those
+  addresses. If the port cannot be opened MikrApp still starts and the Logs page
+  says why. Not built yet: a button that sets syslog up on the routers for
+  you, and a polling fallback for routers that cannot reach the server.
+
 ## What's intentionally left out (to add the same way, following the same layers)
 
 The original PHP file has ~11,800 lines including per-port PoE toggling,
@@ -180,15 +193,43 @@ Happy to build any of those out next -- just say which one matters most.
   this; if you ever run multiple uvicorn workers behind a proxy, switch
   `MAX_CONCURRENT_CHECKS` down accordingly since it's per-process.
 
+## Sending router logs to MikrApp
+
+Run these two commands in the terminal of every MikroTik. Replace `192.168.10.5`
+with the IP address of the computer that runs MikrApp, as the router sees it, and
+`10.110.110.1` with the router's own IP address, the same one entered for it in MikrApp:
+
+    /system logging action add name=mikrapp target=remote remote=192.168.10.5 remote-port=5514 src-address=10.110.110.1 bsd-syslog=yes syslog-facility=local0
+    /system logging add action=mikrapp topics=info,warning,error,critical
+
+- **Check:** `/system logging action print` and `/system logging print` show the new
+  action and rule. `:log info "mikrapp syslog test"` sends a test message that should
+  appear on the Logs page within seconds.
+- **Remove:** `/system logging remove [find action=mikrapp]`, then
+  `/system logging action remove [find name=mikrapp]`.
+- **On the MikrApp computer:** allow incoming UDP on port 5514 in its firewall (Windows:
+  an inbound rule in Windows Defender Firewall). Port 514 needs administrator rights on
+  most systems, so the default is 5514; to change it set `MIKRAPP_SYSLOG_PORT` and use the
+  same number in `remote-port`.
+- `src-address` makes the router send from the address MikrApp knows. Without it the router
+  may use another address and MikrApp will ignore the messages (they show up under
+  "unknown senders" on the Logs page).
+- The router needs a route to the MikrApp computer. A router behind an agent often has none.
+- Parameter names can differ between RouterOS versions; type `/system logging action add `
+  and press Tab to see what yours accepts. Not yet tried on real routers.
+- Syslog over UDP is not encrypted or authenticated. Use it only on a trusted network.
+
 ## Tests
 
     python tests/test_cr001_agent_chain.py
     python tests/test_cr005_scheduler.py
     python tests/test_cr013_check_history.py
+    python tests/test_cr011_syslog.py
 
 Check the acceptance criteria of CR-001 (chain resolution, nested tunnels,
 status logic, concurrency limits, topology, backups) CR-005 (scheduler
 timing, skipped rounds, clean stop, dashboard JavaScript) and CR-013 (check
-records, log file, database, retention) with a fake SSH
+records, log file, database, retention) and CR-011 (syslog parser, real UDP listener,
+queue, retention, log pages) with a fake SSH
 layer and a fake RouterOS API server. No router or network is needed
 (`node` is used for the dashboard JavaScript check when installed). See `docs/`.

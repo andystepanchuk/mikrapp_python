@@ -12,3 +12,4 @@ Change requests that have been implemented are recorded here:
 | [CR-001](CR-001-second-level-agent-chain.md) | Second-level agent chain | implemented; awaiting a test on real routers |
 | [CR-005](CR-005-background-scheduler.md) | Background scheduler and periodic status checks | implemented; awaiting a test on your side |
 | [CR-013](CR-013-check-history.md) | Check history: log file, then database | implemented; awaiting a test on your side |
+| [CR-011](CR-011-syslog-device-logs.md) | Syslog receiver and device log accumulation | implemented; awaiting a test on your routers |

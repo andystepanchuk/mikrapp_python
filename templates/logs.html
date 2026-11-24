@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><h1>Logs</h1></div>
+
+<section class="card">
+  <h2>Syslog receiver</h2>
+  {% if status.listening %}
+  <p>Listening on UDP <strong>{{ status.host }}:{{ status.port }}</strong>.
+     Received {{ status.received }} messages, stored {{ status.stored }}{% if status.dropped_unknown %}, dropped {{ status.dropped_unknown }} from unknown senders{% endif %}{% if status.dropped_full %}, <span class="error">dropped {{ status.dropped_full }} because the queue was full</span>{% endif %} since MikrApp started.</p>
+  {% else %}
+  <p class="error">Not listening: {{ status.error or 'not started' }}</p>
+  {% endif %}
+  {% if status.unknown_senders %}
+  <p class="muted">Messages from addresses that are not a device in MikrApp (set <code>src-address</code> on the router to the address entered here):
+    {% for ip, n in status.unknown_senders %}<code>{{ ip }}</code> ({{ n }}){{ ', ' if not loop.last }}{% endfor %}</p>
+  {% endif %}
+</section>
+
+<form method="get" action="/logs" class="card">
+  <div class="grid-2">
+    <div>
+      <label>Device</label>
+      <select name="device">
+        <option value="0">All devices</option>
+        {% for d in devices %}<option value="{{ d.id }}" {{ 'selected' if f.device == d.id else '' }}>{{ d.display_name }} ({{ d.ip }})</option>{% endfor %}
+      </select>
+      <label>Severity</label>
+      <select name="severity">
+        {% for v, label in severity_choices %}<option value="{{ v }}" {{ 'selected' if f.severity == v else '' }}>{{ label }}</option>{% endfor %}
+      </select>
+      <label>Time</label>
+      <select name="hours">
+        {% for v, label in hours_choices %}<option value="{{ v }}" {{ 'selected' if f.hours == v else '' }}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Topic (one word, e.g. account, firewall)</label>
+      <input type="text" name="topic" value="{{ f.topic }}">
+      <label>Text contains</label>
+      <input type="text" name="q" value="{{ f.q }}">
+      <button type="submit" class="btn primary">Search</button>
+    </div>
+  </div>
+</form>
+
+<table class="device-table">
+  <thead><tr><th>Time</th><th>Device</th><th>Severity</th><th>Topics</th><th>Message</th></tr></thead>
+  <tbody>
+    {% for e in entries %}
+    <tr>
+      <td class="ts" data-ts="{{ e.received_at }}">{{ e.received_at[:19] }}</td>
+      <td><a href="/devices/{{ e.device_id }}">{{ e.device_name }}</a></td>
+      <td>{% if e.severity_num <= 3 %}<span class="pill offline">{{ e.severity }}</span>{% elif e.severity_num == 4 %}<span class="pill checking">{{ e.severity }}</span>{% else %}<span class="muted">{{ e.severity }}</span>{% endif %}</td>
+      <td class="muted">{{ e.topics }}</td>
+      <td>{{ e.message }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="empty">No messages match.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if next_before %}
+<p><a class="btn" href="/logs?device={{ f.device }}&severity={{ f.severity|urlencode }}&topic={{ f.topic|urlencode }}&q={{ f.q|urlencode }}&hours={{ f.hours }}&limit={{ f.limit }}&before={{ next_before }}">Older messages</a></p>
+{% endif %}
+{% endblock %}

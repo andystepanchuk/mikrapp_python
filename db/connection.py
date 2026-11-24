@@ -99,6 +99,22 @@ CREATE TABLE IF NOT EXISTS check_history (
 CREATE INDEX IF NOT EXISTS idx_check_history_device ON check_history(device_id, checked_at);
 CREATE INDEX IF NOT EXISTS idx_check_history_time ON check_history(checked_at);
 
+-- Log messages routers send by syslog. No foreign key: the logs of a deleted device are
+-- kept (each row carries the device's name as it was).
+CREATE TABLE IF NOT EXISTS logs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id     INTEGER NOT NULL,
+    received_at   TEXT NOT NULL,
+    device_name   TEXT DEFAULT '',
+    sender_ip     TEXT DEFAULT '',
+    severity      TEXT DEFAULT 'info',
+    severity_num  INTEGER DEFAULT 6,
+    topics        TEXT DEFAULT '',
+    message       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_logs_device ON logs(device_id, id);
+CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(received_at);
+
 CREATE INDEX IF NOT EXISTS idx_devices_site ON devices(site_id);
 CREATE INDEX IF NOT EXISTS idx_backups_device ON backups(device_id);
 """

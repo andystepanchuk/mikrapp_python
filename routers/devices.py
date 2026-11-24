@@ -141,5 +141,6 @@ async def device_detail(device_id: int, request: Request):
         "request": request, "active": "devices", "device": device, "detail": detail,
         "sites": sites,
         "history": request.app.state.history_repo.latest_for_device(device_id, 50),
+        "logs": request.app.state.logs_repo.latest_for_device(device_id, 50),
         "agents": [a for a in devices_repo.list_agent_candidates() if a.id != device.id], "offline_for": _offline_duration(device),
     })

@@ -133,6 +133,25 @@
 </section>
 
 <section class="card">
+  <h2>Recent log messages <span class="muted">(latest 50 &middot; <a href="/logs?device={{ device.id }}&hours=0">all logs of this device</a>)</span></h2>
+  <table class="device-table">
+    <thead><tr><th>Time</th><th>Severity</th><th>Topics</th><th>Message</th></tr></thead>
+    <tbody>
+      {% for e in logs %}
+      <tr>
+        <td class="ts" data-ts="{{ e.received_at }}">{{ e.received_at[:19] }}</td>
+        <td>{% if e.severity_num <= 3 %}<span class="pill offline">{{ e.severity }}</span>{% elif e.severity_num == 4 %}<span class="pill checking">{{ e.severity }}</span>{% else %}<span class="muted">{{ e.severity }}</span>{% endif %}</td>
+        <td class="muted">{{ e.topics }}</td>
+        <td>{{ e.message }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">No log messages received from this device yet. See the README for the two router commands that send them.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
   <h2>Check history <span class="muted">(latest 50)</span></h2>
   <table class="device-table">
     <thead><tr><th>Time</th><th>Result</th><th>Route</th><th>Trigger</th><th>Duration</th><th>Latency</th><th>Details</th></tr></thead>

@@ -44,3 +44,9 @@ CHECK_LOG_ENABLED = CHECK_LOG_DIR.lower() not in _off
 CHECK_LOG_DAYS = int(os.environ.get("MIKRAPP_CHECK_LOG_DAYS", "30"))          # 0 = keep files forever
 CHECK_HISTORY_ENABLED = os.environ.get("MIKRAPP_CHECK_HISTORY", "on").strip().lower() not in _off
 CHECK_HISTORY_DAYS = int(os.environ.get("MIKRAPP_CHECK_HISTORY_DAYS", "90"))  # 0 = keep rows forever
+
+# Device logs by syslog (CR-011). Routers send their log to this UDP port; see README.
+SYSLOG_ENABLED = os.environ.get("MIKRAPP_SYSLOG", "on").strip().lower() not in _off
+SYSLOG_HOST = os.environ.get("MIKRAPP_SYSLOG_HOST", "0.0.0.0")
+SYSLOG_PORT = int(os.environ.get("MIKRAPP_SYSLOG_PORT", "5514"))     # 514 needs admin rights on most systems
+SYSLOG_DAYS = int(os.environ.get("MIKRAPP_SYSLOG_DAYS", "90"))       # 0 = keep forever

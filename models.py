@@ -130,3 +130,17 @@ class CheckRecord:
                 text += f" ({a['error']})"
             parts.append(text)
         return " \u2192 ".join(parts)
+
+
+@dataclass
+class LogEntry:
+    """One log message a router sent to MikrApp by syslog."""
+    device_id: int
+    received_at: str                     # when MikrApp received it (UTC, ISO 8601, milliseconds)
+    device_name: str
+    sender_ip: str
+    severity: str                        # emergency .. debug
+    severity_num: int                    # 0 (worst) .. 7
+    topics: str                          # e.g. "system,info,account"
+    message: str
+    id: int = 0

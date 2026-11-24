@@ -13,26 +13,30 @@ from db.templates_repo import TemplateRepository
 from db.backups_repo import BackupRepository
 from db.topology_repo import TopologyRepository
 from db.check_history_repo import CheckHistoryRepository
+from db.logs_repo import LogRepository
 from services.device_service import DeviceService
 from services.backup_service import BackupService
 from services.topology_service import TopologyService
 from services.device_detail_service import DeviceDetailService
 from services.scheduler_service import Scheduler
 from services.check_recorder import CheckRecorder
-from routers import auth, dashboard, sites, devices, commands, backups, topology
+from services.log_service import LogService
+from routers import auth, dashboard, sites, devices, commands, backups, topology, logs
 from routers.auth import AuthMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start the history writer and the scheduler with the application; stop them cleanly
-    on shutdown (scheduler first, so the last checks still reach the history)."""
+    """Start the history writer, the syslog listener and the scheduler with the application;
+    stop them cleanly on shutdown (scheduler first, so the last checks still reach the history)."""
     await app.state.recorder.start()
+    await app.state.log_service.start()
     await app.state.scheduler.start()
     try:
         yield
     finally:
         await app.state.scheduler.stop()
+        await app.state.log_service.stop()
         await app.state.recorder.stop()
 
 
@@ -62,8 +66,14 @@ def create_app() -> FastAPI:
     app.state.backup_service = BackupService(app.state.devices_repo, app.state.backups_repo)
     app.state.topology_service = TopologyService(app.state.devices_repo, app.state.topo_repo)
     app.state.device_detail_service = DeviceDetailService(app.state.devices_repo, app.state.backups_repo)
+    app.state.logs_repo = LogRepository(db)
+    app.state.log_service = LogService(app.state.devices_repo, app.state.logs_repo,
+                                       config.SYSLOG_HOST, config.SYSLOG_PORT, config.SYSLOG_DAYS,
+                                       config.SYSLOG_ENABLED)
     app.state.scheduler = Scheduler(app.state.device_service, config.CHECK_INTERVAL,
                                     config.SCHEDULER_ENABLED)
+    app.state.scheduler.add_job("delete old device logs", app.state.log_service.purge_job,
+                                3600, run_now=False)
 
     app.include_router(auth.router)
     app.include_router(dashboard.router)
@@ -72,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(commands.router)
     app.include_router(backups.router)
     app.include_router(topology.router)
+    app.include_router(logs.router)
 
     return app
 
