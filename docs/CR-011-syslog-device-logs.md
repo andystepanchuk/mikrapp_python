@@ -1,6 +1,6 @@
 # CR-011 - Syslog receiver and device log accumulation
 
-**Status:** implemented, automated tests pass; not yet tried on your routers.
+**Status:** implemented and complete, automated tests pass; not yet tried on your routers.
 
 ## Desired state (as implemented)
 1. Routers send their log to MikrApp by syslog (UDP). A listener inside the application receives it
@@ -44,6 +44,7 @@ Automated: `python tests/test_cr011_syslog.py` (23 checks; datagrams go through 
 **Could not test:** real RouterOS message formats and routers' ability to reach your computer; the router commands
 are not tried on real devices. If a format is read wrongly, send me a sample line from the Logs page.
 
-## Not in this change (open in the change request)
-- A "Set up syslog" button that runs the router commands for you.
+## Decided: not needed
+Considered during review and dropped, so CR-011 is complete as delivered:
+- A "Set up syslog" button that runs the router commands for you (the two commands in the README are entered by hand).
 - A polling fallback for routers that cannot reach the server (for example behind an agent).

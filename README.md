@@ -167,8 +167,8 @@ your laptop.
   start and every hour by the scheduler. Messages from addresses that are not
   a device in MikrApp are dropped and counted; the Logs page lists those
   addresses. If the port cannot be opened MikrApp still starts and the Logs page
-  says why. Not built yet: a button that sets syslog up on the routers for
-  you, and a polling fallback for routers that cannot reach the server.
+  says why. A button that sets syslog up on the routers, and a polling fallback
+  for routers that cannot reach the server, were considered and are not needed.
 
 ## What's intentionally left out (to add the same way, following the same layers)
 
