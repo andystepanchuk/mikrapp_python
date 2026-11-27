@@ -1,6 +1,6 @@
 # CR-011 - Syslog receiver and device log accumulation
 
-**Status:** implemented and complete, automated tests pass; not yet tried on your routers.
+**Status:** implemented, complete and tested on your routers (works).
 
 ## Desired state (as implemented)
 1. Routers send their log to MikrApp by syslog (UDP). A listener inside the application receives it
