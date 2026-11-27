@@ -13,3 +13,4 @@ Change requests that have been implemented are recorded here:
 | [CR-005](CR-005-background-scheduler.md) | Background scheduler and periodic status checks | implemented; awaiting a test on your side |
 | [CR-013](CR-013-check-history.md) | Check history: log file, then database | implemented; awaiting a test on your side |
 | [CR-011](CR-011-syslog-device-logs.md) | Syslog receiver and device log accumulation | implemented; awaiting a test on your routers |
+| [CR-010](CR-010-manual-topology-links.md) | Manual topology links with port traffic | implemented; awaiting a test on your routers |

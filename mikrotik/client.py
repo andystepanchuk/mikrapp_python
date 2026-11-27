@@ -138,13 +138,13 @@ class MikrotikClient:
               error=None if reachable else f"no answer on TCP port {', '.join(map(str, ports))}")
         return reachable
 
-    async def collect_metrics(self, extra_commands: bool = False, attempts=None) -> dict:
+    async def collect_metrics(self, extra_commands: bool = False, attempts=None, ports=None) -> dict:
         """Try the API first (fast, structured), fall back to SSH."""
         api_error = None
         if self.device.protocol in ("auto", "api"):
             t0 = time.monotonic()
             try:
-                data = await self._collect_via_api(extra_commands)
+                data = await self._collect_via_api(extra_commands, ports)
                 _note(attempts, "api", t0)
                 return data
             except Exception as exc:
@@ -154,7 +154,7 @@ class MikrotikClient:
                 api_error = exc
         t0 = time.monotonic()
         try:
-            data = await self._collect_via_ssh(extra_commands)
+            data = await self._collect_via_ssh(extra_commands, ports)
             _note(attempts, "ssh", t0)
             return data
         except Exception as ssh_error:
@@ -168,7 +168,7 @@ class MikrotikClient:
                     raise err
             raise RuntimeError(f"API: {api_error}; SSH: {ssh_error}") from ssh_error
 
-    async def _collect_via_api(self, extra_commands: bool) -> dict:
+    async def _collect_via_api(self, extra_commands: bool, ports=None) -> dict:
         async with self._api() as api:
             resource = (await api.talk("/system/resource/print")) or [{}]
             identity = (await api.talk("/system/identity/print")) or [{}]
@@ -181,9 +181,11 @@ class MikrotikClient:
                     data.update(_parse_poe(poe))
                 except RouterOsApiError:
                     pass
+            if ports:                       # byte counters of the ports that are end A of a link
+                data["port_counters"] = _counters_from_rows(await api.talk("/interface/print"), ports)
             return data
 
-    async def _collect_via_ssh(self, extra_commands: bool) -> dict:
+    async def _collect_via_ssh(self, extra_commands: bool, ports=None) -> dict:
         async with self._ssh() as ssh:
             resource_txt = await ssh.run("/system resource print")
             identity_txt = await ssh.run("/system identity print")
@@ -197,6 +199,9 @@ class MikrotikClient:
                     data.update(_parse_poe_text(poe_txt))
                 except Exception:
                     pass
+            if ports:
+                stats_txt = await ssh.run("/interface print stats terse without-paging")
+                data["port_counters"] = _counters_from_rows(_parse_terse(stats_txt), ports)
             return data
 
     async def run_commands(self, commands: list[str]) -> str:
@@ -603,3 +608,16 @@ def _ping_from_text(text: str, count: int) -> dict:
         received = len(re.findall(r"\bttl=|\d+\s+\S+\s+\d+\s+\d+\s+\d+ms", text))
     return {"sent": sent, "received": received,
             "avg_ms": _parse_rtt_ms(avg_m.group(1)) if avg_m else None}
+
+
+def _counters_from_rows(rows: list, ports) -> dict:
+    """{port: {"rx": bytes, "tx": bytes}} for the requested ports the router really has."""
+    wanted = set(ports)
+    out = {}
+    for row in rows:
+        name = row.get("name")
+        if name in wanted:
+            rx, tx = _to_float(row.get("rx-byte")), _to_float(row.get("tx-byte"))
+            if rx is not None and tx is not None:
+                out[name] = {"rx": int(rx), "tx": int(tx)}
+    return out

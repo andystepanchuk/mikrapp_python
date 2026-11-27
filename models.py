@@ -144,3 +144,26 @@ class LogEntry:
     topics: str                          # e.g. "system,info,account"
     message: str
     id: int = 0
+
+
+@dataclass
+class TopologyLink:
+    """A connection you drew: DeviceA.port -> DeviceB.port. Ports are optional."""
+    id: int
+    a_device_id: int
+    a_port: str
+    b_device_id: int
+    b_port: str
+
+
+@dataclass
+class PortCounter:
+    """Latest reading of one port (the port at end A of a link)."""
+    device_id: int
+    port: str
+    rx_bytes: Optional[int]
+    tx_bytes: Optional[int]
+    read_at: str
+    rx_bps: Optional[float]
+    tx_bps: Optional[float]
+    found: bool = True

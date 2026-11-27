@@ -284,8 +284,8 @@ async def test_rest():
     assert {d.id: d.agent_path for d in r.list_all()}[t] == "A1 \u2192 A2"
     ok("AC-9: lists/pages show the full path 'A1 \u2192 A2'")
 
-    import services.topology_service as ts, services.backup_service as bs
-    from db.topology_repo import TopologyRepository
+    import services.backup_service as bs
+    from services.topology_view import build_view
     from db.backups_repo import BackupRepository
     class FakeClient:
         def __init__(self, d, via=None): self.d, self.via = d, list(via or [])
@@ -294,10 +294,10 @@ async def test_rest():
         async def export_config(self): return "# export via " + ",".join(str(x.id) for x in self.via)
         async def run_commands(self, cmds): return "ran via " + ",".join(str(x.id) for x in self.via)
     cf.MikrotikClient = FakeClient           # the real ClientFactory now builds fakes, but WITH the real chains
-    res = await ts.TopologyService(r, TopologyRepository(r.db)).scan()
-    pairs = {(l["from"], l["to"], l["label"]) for l in res["links"]}
-    assert (a1, a2, "agent") in pairs and (a2, t, "agent") in pairs and (a2, m, "agent") in pairs, pairs
-    ok("AC-10: topology draws A1-A2 and A2-T links labelled 'agent'")
+    view = build_view(r.list_all(), [], {}, {}, 60)            # no links drawn: only the agent lines
+    pairs = {(l["from"], l["to"]) for l in view["agent_lines"]}
+    assert (a1, a2) in pairs and (a2, t) in pairs and (a2, m) in pairs, pairs
+    ok("AC-10: topology draws the agent lines A1-A2 and A2-T (dotted, no labels)")
     b = await bs.BackupService(r, BackupRepository(r.db)).backup_device(r.get(m))
     assert b["ok"]; assert open(os.path.join(config.BACKUP_DIR, str(m), b["filename"])).read() == f"# export via {a1},{a2}"
     ok("AC-11: backup of M goes through the chain [A1, A2]")

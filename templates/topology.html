@@ -3,14 +3,10 @@
 <div class="page-header">
   <div>
     <h1>Topology</h1>
-    <div class="topo-meta">
-      {{ devices|length }} devices, {{ unmanaged|length }} unmanaged, {{ links|length }} links
-      {% if scanned_at %} · Scanned {{ scanned_at }}{% endif %}
-    </div>
+    <div class="topo-meta">{{ topo.nodes|length }} devices, {{ topo.links|length }} links. Traffic is the traffic of the port at end A, updated after every check round.</div>
   </div>
   <div class="topo-controls">
     <form method="get" action="/topology">
-      <input type="hidden" name="unmanaged" value="{{ 1 if show_unmanaged else 0 }}">
       <select name="site" onchange="this.form.submit()">
         <option value="0">All sites</option>
         {% for s in sites %}
@@ -18,71 +14,78 @@
         {% endfor %}
       </select>
     </form>
-    <button id="scan-topo-btn" class="btn primary" type="button">Refresh scan</button>
     <button id="topo-fit-btn" class="btn" type="button">Fit</button>
-    <button id="topo-reset-btn" class="btn" type="button">Reset</button>
-    <a class="btn" href="/topology?site={{ site_filter }}&unmanaged={{ 0 if show_unmanaged else 1 }}">
-      Unmanaged: {{ 'On' if show_unmanaged else 'Off' }}
-    </a>
+    <button id="topo-reset-layout-btn" class="btn" type="button">Reset layout</button>
   </div>
 </div>
+
+{% if error %}<div class="card"><p class="error">{{ error }}</p></div>{% endif %}
 
 <div class="topo-legend">
   <span><span class="dot online"></span> Online</span>
   <span><span class="dot offline"></span> Offline</span>
-  <span><span class="dot unmanaged"></span> Unmanaged</span>
-  <span class="muted">On line: port · speed</span>
+  <span class="muted">Red dashed line: an end is offline &middot; dotted grey line: served by an agent &middot; &darr; received, &uarr; sent on the port of end A &middot; drag devices to arrange them</span>
 </div>
 
 <div class="topo-stage" id="topoStage">
   <div class="topo-canvas" id="topoCanvas">
-    <svg class="topo-svg" id="topoSvg" width="1000" height="760">
-      {% for l in links %}
-        {% if l['from'] in positions and l['to'] in positions %}
-          {% set p1 = positions[l['from']] %}
-          {% set p2 = positions[l['to']] %}
-          {% set x1 = p1.x + 78 %}{% set y1 = p1.y + 42 %}
-          {% set x2 = p2.x + 78 %}{% set y2 = p2.y + 42 %}
-          <line x1="{{ x1 }}" y1="{{ y1 }}" x2="{{ x2 }}" y2="{{ y2 }}"></line>
-          {% if l.label and l.label != 'site' %}
-          <text x="{{ (x1 + x2) // 2 }}" y="{{ (y1 + y2) // 2 - 3 }}" text-anchor="middle">{{ l.label }}</text>
-          {% endif %}
-        {% endif %}
-      {% endfor %}
-
-      {% for up in unmanaged_positions %}
-        {% if up.item.from_device in positions %}
-          {% set p1 = positions[up.item.from_device] %}
-          {% set x1 = p1.x + 78 %}{% set y1 = p1.y + 42 %}
-          {% set x2 = up.x + 55 %}{% set y2 = up.y + 18 %}
-          <line x1="{{ x1 }}" y1="{{ y1 }}" x2="{{ x2 }}" y2="{{ y2 }}" stroke-dasharray="4 3" opacity="0.45"></line>
-          {% set ulbl = ((up.item.via or '') ~ (' · ' ~ up.item.speed if up.item.speed else ''))|trim %}
-          {% if ulbl %}
-          <text x="{{ (x1 + x2) // 2 }}" y="{{ (y1 + y2) // 2 - 2 }}" text-anchor="middle" opacity="0.7">{{ ulbl }}</text>
-          {% endif %}
-        {% endif %}
-      {% endfor %}
-    </svg>
-
-    <div class="topo-nodes">
-      {% for d in devices %}
-        {% set p = positions[d.id] %}
-        <div class="node-card {{ d.status }}" style="left:{{ p.x }}px; top:{{ p.y }}px;">
-          <div class="node-name">{{ d.display_name }}</div>
-          <div class="node-ip">{{ d.ip }}</div>
-          <div class="node-metrics">
-            {% if d.status != 'online' %}offline{% elif d.kind == 'generic' %}ping {{ d.latency_ms if d.latency_ms is not none else '?' }} ms{% else %}CPU {{ d.cpu_usage|round|int }}% · RAM {{ d.ram_usage|round|int }}%{% endif %}
-          </div>
-        </div>
-      {% endfor %}
-
-      {% for up in unmanaged_positions %}
-        <div class="node-card unmanaged" style="left:{{ up.x }}px; top:{{ up.y }}px;">
-          <div class="node-name">{{ up.item.name or up.item.ip or 'Unknown' }}</div>
-          <div class="node-ip">{{ up.item.board or up.item.ip or '' }}</div>
-        </div>
-      {% endfor %}
-    </div>
+    <svg class="topo-svg" id="topoSvg" width="2000" height="1400"></svg>
+    <div class="topo-nodes" id="topoNodes"></div>
   </div>
 </div>
+<script type="application/json" id="topo-data">{{ topo|tojson }}</script>
+
+<section class="card">
+  <h2>Add link</h2>
+  <form method="post" action="/topology/links/add" class="link-form">
+    <div class="grid-2">
+      <div>
+        <label>End A (traffic is read here)</label>
+        <select name="a_device_id">{% for d in devices %}<option value="{{ d.id }}">{{ d.display_name }} ({{ d.ip }})</option>{% endfor %}</select>
+        <label>Port of end A (optional, for example eth3)</label>
+        <input type="text" name="a_port" maxlength="64">
+      </div>
+      <div>
+        <label>End B</label>
+        <select name="b_device_id">{% for d in devices %}<option value="{{ d.id }}">{{ d.display_name }} ({{ d.ip }})</option>{% endfor %}</select>
+        <label>Port of end B (optional)</label>
+        <input type="text" name="b_port" maxlength="64">
+      </div>
+    </div>
+    <button type="submit" class="btn primary">Add link</button>
+  </form>
+</section>
+
+<table class="device-table">
+  <thead><tr><th>Link</th><th>Traffic</th><th>State</th><th></th></tr></thead>
+  <tbody>
+    {% for l in topo.links %}
+    <tr>
+      <td>{{ l.a.name }}{% if l.a.port %}.{{ l.a.port }}{% endif %} &rarr; {{ l.b.name }}{% if l.b.port %}.{{ l.b.port }}{% endif %}</td>
+      <td>{{ l.traffic.text or '—' }}</td>
+      <td><span class="pill {{ 'offline' if l.state == 'down' else 'online' }}">{{ 'down' if l.state == 'down' else 'ok' }}</span></td>
+      <td>
+        <details>
+          <summary class="btn small">Edit</summary>
+          <form method="post" action="/topology/links/{{ l.id }}/edit" class="link-form">
+            <label>End A</label>
+            <select name="a_device_id">{% for d in devices %}<option value="{{ d.id }}" {{ 'selected' if d.id == l.a.id else '' }}>{{ d.display_name }} ({{ d.ip }})</option>{% endfor %}</select>
+            <input type="text" name="a_port" value="{{ l.a.port }}" maxlength="64" placeholder="port (optional)">
+            <label>End B</label>
+            <select name="b_device_id">{% for d in devices %}<option value="{{ d.id }}" {{ 'selected' if d.id == l.b.id else '' }}>{{ d.display_name }} ({{ d.ip }})</option>{% endfor %}</select>
+            <input type="text" name="b_port" value="{{ l.b.port }}" maxlength="64" placeholder="port (optional)">
+            <button type="submit" class="btn primary">Save</button>
+          </form>
+        </details>
+        <form method="post" action="/topology/links/{{ l.id }}/delete" onsubmit="return confirm('Delete this link?')">
+          <button type="submit" class="btn small danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="empty">No links yet. Add one above.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
 {% endblock %}
+{% block scripts %}<script src="/static/topology.js"></script>{% endblock %}

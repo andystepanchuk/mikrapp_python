@@ -70,11 +70,11 @@ class FakeApi:
 @asynccontextmanager
 async def fake__api(self):
     yield FakeApi()
-async def fake_collect_api(self, extra):
+async def fake_collect_api(self, extra, ports=None):
     b = BEH[self.device.ip]; await asyncio.sleep(b.get("api_ms", 0.0))
     if b.get("api_err"): raise OSError(b["api_err"])
     return {"identity": "rtr", "cpu_usage": 3.0, "ram_usage": 20.0, "uptime": "1d"}
-async def fake_collect_ssh(self, extra):
+async def fake_collect_ssh(self, extra, ports=None):
     b = BEH[self.device.ip]
     if b.get("ssh_err"): raise OSError(b["ssh_err"])
     return {"identity": "rtr", "cpu_usage": 3.0, "ram_usage": 20.0, "uptime": "1d"}

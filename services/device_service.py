@@ -25,10 +25,12 @@ from typing import Dict, List, Optional
 
 import config
 from db.devices_repo import DeviceRepository
+from db.topology_repo import TopologyRepository
 from models import Device, CheckResult, CheckRecord
 from mikrotik.client import MikrotikClient
 from mikrotik.tunnel import AgentChainError, AgentHopError, AgentForwardingError
 from services.check_recorder import CheckRecorder, utc_now_iso
+from services.port_traffic_service import PortTrafficService
 from services.client_factory import ClientFactory
 
 log = logging.getLogger("mikrapp.checks")
@@ -45,9 +47,13 @@ class CheckContext:
 class DeviceService:
     def __init__(self, devices_repo: DeviceRepository,
                  max_concurrency: int = config.MAX_CONCURRENT_CHECKS,
-                 recorder: Optional[CheckRecorder] = None):
+                 recorder: Optional[CheckRecorder] = None,
+                 topology_repo: Optional[TopologyRepository] = None,
+                 traffic: Optional[PortTrafficService] = None):
         self.repo = devices_repo
         self.recorder = recorder
+        self.topology_repo = topology_repo
+        self.traffic = traffic
         self.clients = ClientFactory(devices_repo)
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._agent_limits: Dict[int, asyncio.Semaphore] = {}
@@ -106,6 +112,24 @@ class DeviceService:
         except Exception:
             log.exception("could not record the check of device %s", device.id)
 
+    # -- port counters for topology links (CR-010) ----------------------------
+
+    async def _link_ports(self, device: Device) -> List[str]:
+        """Ports of this device that are end A of a link. Empty for everything else, so devices
+        that are not end A of any link never have their counters read."""
+        if self.topology_repo is None or device.kind == "generic":
+            return []
+        return await asyncio.to_thread(self.topology_repo.end_a_ports, device.id)
+
+    async def _store_traffic(self, device: Device, ports: List[str], data: dict):
+        counters = data.pop("port_counters", None)
+        if not ports or self.traffic is None:
+            return
+        try:
+            await self.traffic.record(device.id, ports, counters or {})
+        except Exception:
+            log.exception("could not store the port readings of device %s", device.id)
+
     # -- direct ---------------------------------------------------------------
 
     async def _check_direct(self, device: Device, full: bool, ctx: CheckContext) -> CheckResult:
@@ -121,14 +145,17 @@ class DeviceService:
             await asyncio.to_thread(self.repo.set_status, device.id, status)
             return CheckResult(device.id, status)
 
+        ports = await self._link_ports(device)
+        extra = {"ports": ports} if ports else {}
         try:
-            data = await client.collect_metrics(extra_commands=full, attempts=ctx.attempts)
+            data = await client.collect_metrics(extra_commands=full, attempts=ctx.attempts, **extra)
         except Exception as exc:
             reachable = await client.is_reachable(attempts=ctx.attempts)
             status = "online" if reachable else "offline"
             await asyncio.to_thread(self.repo.set_status, device.id, status, str(exc))
             return CheckResult(device.id, status, error=str(exc))
 
+        await self._store_traffic(device, ports, data)
         await asyncio.to_thread(self.repo.update_metrics, device.id, data)
         return CheckResult(device.id, "online", data=data)
 
@@ -168,9 +195,11 @@ class DeviceService:
                 await asyncio.to_thread(self.repo.update_metrics, device.id, data)
                 return CheckResult(device.id, "online", data=data)
 
+            ports = await self._link_ports(device)
+            extra = {"ports": ports} if ports else {}
             try:
                 data = await MikrotikClient(device, via=chain).collect_metrics(
-                    extra_commands=full, attempts=ctx.attempts)
+                    extra_commands=full, attempts=ctx.attempts, **extra)
             except Exception as exc:
                 # answers ping but we can't read it (bad login, API off, forwarding off...)
                 await asyncio.to_thread(self.repo.set_status, device.id, "online", str(exc))
@@ -178,6 +207,7 @@ class DeviceService:
                                    data={"latency_ms": ping["avg_ms"]})
 
             data["latency_ms"] = ping["avg_ms"]
+            await self._store_traffic(device, ports, data)
             await asyncio.to_thread(self.repo.update_metrics, device.id, data)
             return CheckResult(device.id, "online", data=data)
 

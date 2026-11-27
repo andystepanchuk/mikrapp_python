@@ -80,12 +80,25 @@ your laptop.
 - Command templates: save reusable RouterOS command sets, run them against
   any selection of devices concurrently, see combined output
 - Config backups: export + store `.rsc` files per device, download them
-- **Topology view**: concurrent MNDP/LLDP/CDP neighbor discovery (+ bridge
-  host tables) across all devices, resolves neighbors to known devices by
-  IP or identity, dedupes links seen from both ends, and renders an
-  SVG graph with pan/zoom. Neighbors that can't be matched to a managed
-  device show up as dashed "unmanaged" nodes (APs, switches you haven't
-  added, etc.), same as the original. See `services/topology_service.py`.
+- **Topology with your own links and port traffic (CR-010):** the Topology page
+  shows the devices you added and the **links you define**; there is no neighbor
+  discovery or scan any more. A link is an object of its own: end A and end B,
+  each a device in MikrApp (a MikroTik or a ping-only host) plus an optional port,
+  e.g. `DeviceA.eth3 -> DeviceB.eth1`. Several links between the same two devices
+  are allowed. Add, edit and delete links under the diagram.
+  - **Traffic** is the traffic of end A's port (needs a managed MikroTik and a
+    port name): what it receives (down arrow) and sends (up arrow). The router
+    reports the port's byte counters during every check round, and MikrApp shows
+    the average rate between two consecutive readings. Only devices that are end A
+    of a link have counters read. No number is shown for the first reading, after a
+    counter reset (router restart), while end A is offline, or when the reading is
+    older than three intervals; an unknown port shows "port not found".
+  - **Colours:** normal line when both ends are online, red dashed when an end is
+    offline. Devices behind an agent are joined to it by a thin dotted line.
+  - **Layout:** drag devices; positions are saved and never move when other devices
+    are added or removed. "Reset layout" returns to the automatic arrangement.
+  - **Live:** after each check round the numbers and colours change in place,
+    without a reload, so your zoom and positions stay.
 - **Single device view** (`/devices/{id}`): live interfaces, IP addresses,
   DHCP leases, PoE, watchdog status, and per-port neighbor identity --
   ported from the original's port-level neighbor resolution (dedupe by
@@ -102,8 +115,8 @@ your laptop.
     opens the RouterOS API (or SSH) *through an SSH port-forward on the
     agent* and reads metrics, runs commands and takes backups as usual.
   - Hosts per agent are throttled (`MIKRAPP_AGENT_CONCURRENCY`, default 4)
-    so a small router isn't overwhelmed. The topology graph draws an
-    "agent" link from each agent to the hosts it serves.
+    so a small router isn't overwhelmed. The topology graph draws a
+    dotted line from each agent to the hosts it serves.
   - **One-time setup on every agent router** (RouterOS disables this by
     default; without it you'll see "agent refused to forward the connection"):
 
@@ -225,11 +238,13 @@ with the IP address of the computer that runs MikrApp, as the router sees it, an
     python tests/test_cr005_scheduler.py
     python tests/test_cr013_check_history.py
     python tests/test_cr011_syslog.py
+    python tests/test_cr010_topology.py
 
 Check the acceptance criteria of CR-001 (chain resolution, nested tunnels,
 status logic, concurrency limits, topology, backups) CR-005 (scheduler
 timing, skipped rounds, clean stop, dashboard JavaScript) and CR-013 (check
 records, log file, database, retention) and CR-011 (syslog parser, real UDP listener,
-queue, retention, log pages) with a fake SSH
+queue, retention, log pages) and CR-010 (links, port rates, positions, the page's
+JavaScript run against a fake page) with a fake SSH
 layer and a fake RouterOS API server. No router or network is needed
 (`node` is used for the dashboard JavaScript check when installed). See `docs/`.

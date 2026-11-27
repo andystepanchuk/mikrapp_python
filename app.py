@@ -16,7 +16,7 @@ from db.check_history_repo import CheckHistoryRepository
 from db.logs_repo import LogRepository
 from services.device_service import DeviceService
 from services.backup_service import BackupService
-from services.topology_service import TopologyService
+from services.port_traffic_service import PortTrafficService
 from services.device_detail_service import DeviceDetailService
 from services.scheduler_service import Scheduler
 from services.check_recorder import CheckRecorder
@@ -62,9 +62,10 @@ def create_app() -> FastAPI:
         config.CHECK_LOG_DIR if config.CHECK_LOG_ENABLED else None, config.CHECK_LOG_DAYS,
         app.state.history_repo if config.CHECK_HISTORY_ENABLED else None, config.CHECK_HISTORY_DAYS)
 
-    app.state.device_service = DeviceService(app.state.devices_repo, recorder=app.state.recorder)
+    app.state.device_service = DeviceService(
+        app.state.devices_repo, recorder=app.state.recorder, topology_repo=app.state.topo_repo,
+        traffic=PortTrafficService(app.state.topo_repo))
     app.state.backup_service = BackupService(app.state.devices_repo, app.state.backups_repo)
-    app.state.topology_service = TopologyService(app.state.devices_repo, app.state.topo_repo)
     app.state.device_detail_service = DeviceDetailService(app.state.devices_repo, app.state.backups_repo)
     app.state.logs_repo = LogRepository(db)
     app.state.log_service = LogService(app.state.devices_repo, app.state.logs_repo,

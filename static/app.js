@@ -105,53 +105,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  const topoStage = document.getElementById("topoStage");
-  const topoCanvas = document.getElementById("topoCanvas");
-  if (topoStage && topoCanvas) {
-    let scale = 1, panX = 0, panY = 0, dragging = false, startX = 0, startY = 0;
-    const apply = () => {
-      topoCanvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-    };
-    topoStage.addEventListener("mousedown", (e) => {
-      dragging = true;
-      startX = e.clientX - panX;
-      startY = e.clientY - panY;
-    });
-    window.addEventListener("mouseup", () => (dragging = false));
-    window.addEventListener("mousemove", (e) => {
-      if (!dragging) return;
-      panX = e.clientX - startX;
-      panY = e.clientY - startY;
-      apply();
-    });
-    topoStage.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      scale = Math.min(2, Math.max(0.3, scale - e.deltaY * 0.001));
-      apply();
-    });
-
-    const resetView = () => {
-      scale = 1;
-      panX = 0;
-      panY = 0;
-      apply();
-    };
-    document.getElementById("topo-fit-btn")?.addEventListener("click", resetView);
-    document.getElementById("topo-reset-btn")?.addEventListener("click", resetView);
-
-    const scanBtn = document.getElementById("scan-topo-btn");
-    if (scanBtn) {
-      scanBtn.addEventListener("click", async () => {
-        scanBtn.disabled = true;
-        scanBtn.textContent = "Scanning...";
-        const params = new URLSearchParams(location.search);
-        const site = parseInt(params.get("site") || "0", 10) || null;
-        await postJSON("/topology/api/scan", { site_id: site });
-        location.reload();
-      });
-    }
-  }
-
   const runTemplateBtn = document.getElementById("run-template-btn");
   if (runTemplateBtn) {
     runTemplateBtn.addEventListener("click", async () => {

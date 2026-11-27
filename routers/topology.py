@@ -1,64 +1,105 @@
-import math
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from urllib.parse import quote
+
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import JSONResponse, RedirectResponse
+
+import config
+from services.topology_view import build_view
 
 router = APIRouter(prefix="/topology")
 
-
-def _layout_devices(devices) -> dict:
-    n = max(len(devices), 1)
-    cx, cy, rx, ry = 500, 310, 360, 230
-    positions = {}
-    for i, d in enumerate(devices):
-        angle = (2 * math.pi * i / n) - math.pi / 2
-        jitter_x = ((d.id * 37) % 40) - 20
-        jitter_y = ((d.id * 17) % 30) - 15
-        positions[d.id] = {
-            "x": round(cx + math.cos(angle) * rx + jitter_x),
-            "y": round(cy + math.sin(angle) * ry + jitter_y),
-        }
-    return positions
+MAX_PORT_NAME = 64
 
 
-def _layout_unmanaged(unmanaged_list: list) -> list:
-    return [
-        {"x": 60 + (i % 7) * 150, "y": 620 + (i // 7) * 52, "item": u}
-        for i, u in enumerate(unmanaged_list)
-    ]
+def _view(state, site: int):
+    devices = state.devices_repo.list_all()
+    shown = [d for d in devices if not site or d.site_id == site]
+    view = build_view(shown, state.topo_repo.list_links(), state.topo_repo.positions(),
+                      state.topo_repo.counters(), config.CHECK_INTERVAL)
+    if view["new_positions"]:                       # a spot is fixed the first time a device is shown
+        state.topo_repo.save_positions(view["new_positions"])
+    view.pop("new_positions")
+    view["config"]["site"] = site
+    return view, devices
 
 
 @router.get("")
-def topology_page(request: Request, site: int = 0, unmanaged: int = 1):
-    devices_repo = request.app.state.devices_repo
-    devices = devices_repo.list_all(site_id=site or None)
-    dev_ids = {d.id for d in devices}
-    sites = request.app.state.sites_repo.list_all()
-
-    cache = request.app.state.topo_repo.get_cache() or {
-        "links": [], "unmanaged": [], "scanned_at": None
-    }
-    links = [l for l in cache["links"] if l["from"] in dev_ids and l["to"] in dev_ids]
-    unmanaged_list = cache["unmanaged"] if unmanaged else []
-    if site:
-        unmanaged_list = [u for u in unmanaged_list if u.get("from_device") in dev_ids]
-
-    return request.app.state.templates.TemplateResponse("topology.html", {
-        "request": request, "active": "topology",
-        "devices": devices, "sites": sites, "site_filter": site,
-        "show_unmanaged": bool(unmanaged),
-        "links": links, "unmanaged": unmanaged_list,
-        "positions": _layout_devices(devices),
-        "unmanaged_positions": _layout_unmanaged(unmanaged_list),
-        "scanned_at": cache["scanned_at"],
+def topology_page(request: Request, site: int = 0, error: str = ""):
+    state = request.app.state
+    view, devices = _view(state, site)
+    return state.templates.TemplateResponse("topology.html", {
+        "request": request, "active": "topology", "topo": view, "devices": devices,
+        "sites": state.sites_repo.list_all(), "site_filter": site, "error": error[:200],
     })
 
 
-@router.post("/api/scan")
-async def scan_topology(request: Request):
+@router.get("/api/state")
+def api_state(request: Request, site: int = 0):
+    view, _ = _view(request.app.state, site)
+    return JSONResponse(view)
+
+
+@router.post("/api/position")
+async def api_position(request: Request):
+    state = request.app.state
     try:
         body = await request.json()
+        device_id, x, y = int(body["device_id"]), int(body["x"]), int(body["y"])
     except Exception:
-        body = {}
-    site_id = body.get("site_id") or None
-    result = await request.app.state.topology_service.scan(site_id=site_id)
-    return JSONResponse({"links": len(result["links"]), "unmanaged": len(result["unmanaged"])})
+        return JSONResponse({"error": "bad request"}, status_code=400)
+    if state.devices_repo.get(device_id) is None:
+        return JSONResponse({"error": "device not found"}, status_code=404)
+    state.topo_repo.save_positions({device_id: (max(0, min(x, 5000)), max(0, min(y, 5000)))})
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/reset-layout")
+def api_reset_layout(request: Request):
+    request.app.state.topo_repo.clear_positions()      # devices get fresh automatic spots on the next view
+    return JSONResponse({"ok": True})
+
+
+def _checked(state, a_id: int, a_port: str, b_id: int, b_port: str):
+    """(error message or None, cleaned ports)."""
+    a_port, b_port = a_port.strip()[:MAX_PORT_NAME], b_port.strip()[:MAX_PORT_NAME]
+    if not a_id or not b_id:
+        return "Choose both devices.", a_port, b_port
+    if a_id == b_id:
+        return "A device cannot be linked to itself.", a_port, b_port
+    if state.devices_repo.get(a_id) is None or state.devices_repo.get(b_id) is None:
+        return "Device not found.", a_port, b_port
+    return None, a_port, b_port
+
+
+def _back(error: str = ""):
+    return RedirectResponse("/topology" + (f"?error={quote(error)}" if error else ""), status_code=303)
+
+
+@router.post("/links/add")
+def add_link(request: Request, a_device_id: int = Form(0), a_port: str = Form(""),
+             b_device_id: int = Form(0), b_port: str = Form("")):
+    state = request.app.state
+    error, a_port, b_port = _checked(state, a_device_id, a_port, b_device_id, b_port)
+    if error:
+        return _back(error)
+    state.topo_repo.add_link(a_device_id, a_port, b_device_id, b_port)
+    return _back()
+
+
+@router.post("/links/{link_id}/edit")
+def edit_link(link_id: int, request: Request, a_device_id: int = Form(0), a_port: str = Form(""),
+              b_device_id: int = Form(0), b_port: str = Form("")):
+    state = request.app.state
+    if state.topo_repo.get_link(link_id) is None:
+        return _back("Link not found.")
+    error, a_port, b_port = _checked(state, a_device_id, a_port, b_device_id, b_port)
+    if error:
+        return _back(error)
+    state.topo_repo.update_link(link_id, a_device_id, a_port, b_device_id, b_port)
+    return _back()
+
+
+@router.post("/links/{link_id}/delete")
+def delete_link(link_id: int, request: Request):
+    request.app.state.topo_repo.delete_link(link_id)
+    return _back()

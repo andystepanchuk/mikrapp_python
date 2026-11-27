@@ -71,11 +71,33 @@ CREATE TABLE IF NOT EXISTS backups (
     created_at  TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS topology_cache (
-    id          INTEGER PRIMARY KEY CHECK (id = 1),
-    links       TEXT NOT NULL DEFAULT '[]',
-    unmanaged   TEXT NOT NULL DEFAULT '[]',
-    scanned_at  TEXT
+-- Topology (CR-010): links you draw yourself, where you dragged each device, and the latest
+-- readings of the ports that are end A of a link. All three vanish together with the device.
+CREATE TABLE IF NOT EXISTS topology_links (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    a_device_id   INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    a_port        TEXT DEFAULT '',
+    b_device_id   INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    b_port        TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_links_a ON topology_links(a_device_id);
+
+CREATE TABLE IF NOT EXISTS topology_positions (
+    device_id  INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+    x          INTEGER NOT NULL,
+    y          INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS port_counters (
+    device_id  INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    port       TEXT NOT NULL,
+    rx_bytes   INTEGER,
+    tx_bytes   INTEGER,
+    read_at    TEXT NOT NULL,          -- when the router was read (UTC)
+    rx_bps     REAL,                   -- rate since the previous reading; NULL = no valid rate
+    tx_bps     REAL,
+    found      INTEGER DEFAULT 1,      -- 0 = the router has no port with this name
+    PRIMARY KEY (device_id, port)
 );
 
 -- History of every check. No foreign key on purpose: the history of a deleted device
